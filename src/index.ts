@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
-import puppeteer, { Page } from "puppeteer";
-import Crawler from "./crawler";
-
 dotenv.config();
+
+import { Page } from "puppeteer";
+import Crawler from "./crawler";
 
 const SAMPLE_SITES = [
     "https://asus.com",

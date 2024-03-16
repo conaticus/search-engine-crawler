@@ -1,5 +1,8 @@
 import puppeteer, { Browser, Page } from "puppeteer";
 import { WordIndicies } from "./types";
+import QueryBuilder from "./db/QueryBuilder";
+import { v4 as uuidv4 } from "uuid";
+import pool from "./db/pool";
 
 export default class Crawler {
     browser: Browser;
@@ -37,6 +40,7 @@ export default class Crawler {
 
     public async crawl(url: string) {
         await this.page.goto(url);
+
         // TODO: Insert more data such as attributes etc.
         const words: string[] = await this.page.$eval("*", (el: any) =>
             el.innerText
@@ -47,11 +51,52 @@ export default class Crawler {
         );
 
         const wordIndicies: WordIndicies = {};
+        const keywordIds: { [key: string]: string } = {};
+        const wordPositions: number[] = [];
+        const wordIds: string[] = [];
+
+        let wordPos = 0;
+        let keywordIdsLength = 0;
+
         words.forEach((word) => {
             if (wordIndicies[word]) wordIndicies[word]++;
             else wordIndicies[word] = 1;
+
+            if (!keywordIds[word]) {
+                keywordIds[word] = uuidv4();
+                keywordIdsLength++;
+            }
+
+            wordIds.push(keywordIds[word]);
+            wordPositions.push(++wordPos);
         });
 
-        // Do SQL inserts or updates
+        const websiteId = uuidv4();
+        // Not really neccesary and quite unoptimised, but is fine for now. TODO: Fix this
+        const websiteIdsBatch = words.map(() => websiteId);
+
+        const wordIndiciesBatch = words.map((word) => wordIndicies[word]);
+
+        await QueryBuilder.insert("websites", ["id", "url"], [websiteId, url]);
+
+        await QueryBuilder.insertManyOrUpdate(
+            "keywords",
+            ["id", "word", "documents_containing_word"],
+            [
+                Object.values(keywordIds),
+                Object.keys(keywordIds),
+                new Array<number>(keywordIdsLength).fill(1), // Ew
+            ],
+            ["UUID", "VARCHAR(45)", "BIGINT"],
+            ["word"],
+            "documents_containing_word = EXCLUDED.documents_containing_word + 1"
+        );
+
+        await QueryBuilder.insertMany(
+            "website_keywords",
+            ["keyword_id", "website_id", "occurrences", "position"],
+            [wordIds, websiteIdsBatch, wordIndiciesBatch, wordPositions],
+            ["UUID", "UUID", "INT", "INT"]
+        );
     }
 }
