@@ -1,25 +1,26 @@
 import puppeteer, { Browser, Page } from "puppeteer";
-import { WordIndicies } from "./types";
 import QueryBuilder from "./db/QueryBuilder";
 import { v4 as uuidv4 } from "uuid";
-import pool from "./db/pool";
 
 export default class Crawler {
     browser: Browser;
-    page: Page;
     documentCount: number;
 
     public static async create(documentCount: number): Promise<Crawler> {
         const crawler = new Crawler();
         crawler.documentCount = documentCount;
-        // crawler.browser = await puppeteer.connect({
-        //     browserWSEndpoint: `wss://${process.env.USER}:${process.env.PASSWORD}@brd.superproxy.io:9222`,
-        // });
-        crawler.browser = await puppeteer.launch();
-        crawler.page = await crawler.browser.newPage();
-        await crawler.page.setRequestInterception(true);
+        crawler.browser = await puppeteer.connect({
+            browserWSEndpoint: `wss://${process.env.USER}:${process.env.PASSWORD}@brd.superproxy.io:9222`,
+        });
 
-        crawler.page.on("request", (request) => {
+        return crawler;
+    }
+
+    public async newPage(): Promise<Page> {
+        const page = await this.browser.newPage();
+        await page.setRequestInterception(true);
+
+        page.on("request", (request) => {
             if (request.isInterceptResolutionHandled()) return;
 
             switch (request.resourceType()) {
@@ -35,23 +36,33 @@ export default class Crawler {
             }
         });
 
-        return crawler;
+        return page;
     }
 
     public async crawl(url: string) {
-        await this.page.goto(url);
+        const page = await this.newPage();
+
+        try {
+            await page.goto(url);
+            console.log(`Crawling: ${url}`);
+        } catch (e) {
+            console.log(`[WARNING]: Failed to request: ${url}\n\n${e}`);
+        }
 
         // TODO: Insert more data such as attributes etc.
-        const words: string[] = await this.page.$eval("*", (el: any) =>
-            el.innerText
-                .toLowerCase()
-                .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
-                .trim()
-                .split(/[\n\r\s]+/g)
-        );
+        const words: string[] = await page.evaluate(() => {
+            const documentText = (document.querySelector("*") as any).innerText;
 
-        const wordIndicies: WordIndicies = {};
-        const keywordIds: { [key: string]: string } = {};
+            return documentText
+                .toLowerCase()
+                .replace(/[.,\/#!$%\^&\*;:{}=\-_`'~()]/g, "")
+                .split(/[\n\r\s]+/g);
+        });
+
+        await page.close();
+
+        const wordIndicies: Record<string, number> = {};
+        const keywordIds: Record<string, string> = {};
         const wordPositions: number[] = [];
         const wordIds: string[] = [];
 
@@ -61,6 +72,7 @@ export default class Crawler {
         words.forEach((word) => {
             if (wordIndicies[word]) wordIndicies[word]++;
             else wordIndicies[word] = 1;
+            if (url.includes("asus") && word == "the") console.log("yeet");
 
             if (!keywordIds[word]) {
                 keywordIds[word] = uuidv4();
@@ -77,26 +89,43 @@ export default class Crawler {
 
         const wordIndiciesBatch = words.map((word) => wordIndicies[word]);
 
-        await QueryBuilder.insert("websites", ["id", "url"], [websiteId, url]);
+        try {
+            await QueryBuilder.insert("websites", ["id", "url"], [websiteId, url]);
 
-        await QueryBuilder.insertManyOrUpdate(
-            "keywords",
-            ["id", "word", "documents_containing_word"],
-            [
-                Object.values(keywordIds),
-                Object.keys(keywordIds),
-                new Array<number>(keywordIdsLength).fill(1), // Ew
-            ],
-            ["UUID", "VARCHAR(45)", "BIGINT"],
-            ["word"],
-            "documents_containing_word = EXCLUDED.documents_containing_word + 1"
-        );
+            const { rows: keywordRows } = await QueryBuilder.insertManyOrUpdate(
+                "keywords",
+                ["id", "word", "documents_containing_word"],
+                [
+                    Object.values(keywordIds),
+                    Object.keys(keywordIds),
+                    new Array<number>(keywordIdsLength).fill(1), // Ew
+                ],
+                ["UUID", "VARCHAR(45)", "BIGINT"],
+                ["word"],
+                "documents_containing_word = keywords.documents_containing_word + 1",
+                ["word", "id"]
+            );
 
-        await QueryBuilder.insertMany(
-            "website_keywords",
-            ["keyword_id", "website_id", "occurrences", "position"],
-            [wordIds, websiteIdsBatch, wordIndiciesBatch, wordPositions],
-            ["UUID", "UUID", "INT", "INT"]
-        );
+            const updatedWordIdsMap: Record<string, string> = {};
+
+            keywordRows.forEach(({ word, id }) => {
+                updatedWordIdsMap[word] = id;
+            });
+
+            const updatedWordIds: string[] = [];
+
+            words.forEach((word) => {
+                updatedWordIds.push(updatedWordIdsMap[word]);
+            });
+
+            await QueryBuilder.insertMany(
+                "website_keywords",
+                ["keyword_id", "website_id", "occurrences", "position"],
+                [updatedWordIds, websiteIdsBatch, wordIndiciesBatch, wordPositions],
+                ["UUID", "UUID", "INT", "INT"]
+            );
+        } catch (e) {
+            console.log(`[WARNING]: Failed to index: ${url}\n\n${e}`);
+        }
     }
 }

@@ -1,3 +1,4 @@
+import { QueryResult } from "pg";
 import pool from "./pool";
 
 // Ideally this class would execute all commands in one query, but pg prohibits this, in future could use: https://www.npmjs.com/package/pg-promise
@@ -15,15 +16,17 @@ export default class QueryBuilder {
         values: any[][],
         types: string[],
         conflictColumns: string[],
-        conflictAction: string
-    ) {
+        conflictAction: string,
+        returns: string[] = []
+    ): Promise<QueryResult<any>> {
         const parametisedColumns = columns.map(
             (_, idx) => `unnest($${idx + 1}::${types[idx]}[]) as ${columns[idx]}`
         );
 
-        const query = `INSERT INTO ${table} (${columns.join()}) SELECT ${parametisedColumns.join()} ON CONFLICT (${conflictColumns.join()}) DO UPDATE SET ${conflictAction}`;
+        let query = `INSERT INTO ${table} (${columns.join()}) SELECT ${parametisedColumns.join()} ON CONFLICT (${conflictColumns.join()}) DO UPDATE SET ${conflictAction}`;
+        if (returns.length != 0) query += ` RETURNING ${returns.join()}`;
 
-        await pool.query(query, values);
+        return await pool.query(query, values);
     }
 
     public static async insertMany(
