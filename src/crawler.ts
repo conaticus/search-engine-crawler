@@ -38,8 +38,7 @@ export default class Crawler {
 
         return page;
     }
-
-    public async crawl(url: string) {
+    async crawl(url: string) {
         const page = await this.newPage();
 
         try {
@@ -48,6 +47,19 @@ export default class Crawler {
         } catch (e) {
             console.log(`[WARNING]: Failed to request: ${url}\n\n${e}`);
         }
+
+        const [pageTitle, pageDescription] = await page.evaluate(() => {
+            const metaTags = document.getElementsByTagName("meta");
+            let description = "";
+
+            for (var i = 0; i < metaTags.length; i++) {
+                if (metaTags[i].getAttribute("name") === "description") {
+                    description = metaTags[i].getAttribute("content") as string;
+                }
+            }
+
+            return [document.title ? document.title : "", description];
+        });
 
         // TODO: Insert more data such as attributes etc.
         const words: string[] = await page.evaluate(() => {
@@ -60,6 +72,7 @@ export default class Crawler {
         });
 
         await page.close();
+        return;
 
         const wordIndicies: Record<string, number> = {};
         const keywordIds: Record<string, string> = {};
@@ -90,7 +103,11 @@ export default class Crawler {
         const wordIndiciesBatch = words.map((word) => wordIndicies[word]);
 
         try {
-            await QueryBuilder.insert("websites", ["id", "url"], [websiteId, url]);
+            await QueryBuilder.insert(
+                "websites",
+                ["id", "title", "description", "url", "word_count"],
+                [websiteId, pageTitle, pageDescription, url, words.length]
+            );
 
             const { rows: keywordRows } = await QueryBuilder.insertManyOrUpdate(
                 "keywords",
