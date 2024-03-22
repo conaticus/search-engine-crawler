@@ -4,6 +4,7 @@ dotenv.config();
 import Crawler from "./crawler";
 import isRootForbidden from "./util/RobotsParser";
 import puppeteer from "puppeteer";
+import loadTopSites from "./util/loadTopSites";
 
 const SAMPLE_SITES = [
     // Ecommerce
@@ -16,7 +17,7 @@ const SAMPLE_SITES = [
 
 async function scrapeWeb() {
     const crawler = await Crawler.create(SAMPLE_SITES.length);
-    await Promise.all(SAMPLE_SITES.map((url) => crawler.crawl(url)));
+    await loadTopSites(crawler.crawl);
     console.log("Websites scraped.");
 }
 
