@@ -2,25 +2,21 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import Crawler from "./crawler";
+import isRootForbidden from "./util/RobotsParser";
+import puppeteer from "puppeteer";
 
 const SAMPLE_SITES = [
-    "https://asus.com",
-    "https://ebay.com",
-    "https://www.bbc.co.uk/news",
-    "https://www.rust-lang.org/",
-    "https://www.vodafone.co.uk",
+    // Ecommerce
     "https://www.amazon.co.uk/",
+    "https://www.ebay.co.uk/",
+    "https://www.walmart.com/",
+    "https://www.ikea.com/gb/en/",
+    "https://www.shopify.com/",
 ];
 
 async function scrapeWeb() {
     const crawler = await Crawler.create(SAMPLE_SITES.length);
-
-    const tasks = [];
-    for (const url of SAMPLE_SITES) {
-        tasks.push(crawler.crawl(url));
-    }
-
-    await Promise.all(tasks);
+    await Promise.all(SAMPLE_SITES.map((url) => crawler.crawl(url)));
     console.log("Websites scraped.");
 }
 

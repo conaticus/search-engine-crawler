@@ -1,6 +1,7 @@
 import puppeteer, { Browser, Page } from "puppeteer";
 import QueryBuilder from "./db/QueryBuilder";
 import { v4 as uuidv4 } from "uuid";
+import isRootForbidden from "./util/RobotsParser";
 
 export default class Crawler {
     browser: Browser;
@@ -38,6 +39,24 @@ export default class Crawler {
 
         return page;
     }
+
+    /**
+     * Checks the robots.txt for a URL to see if the scraper is permitted to crawl the website's root
+     */
+    async isPermitted(url: string): Promise<boolean> {
+        const robotsUrl = url + "/robots.txt";
+        const page = await this.browser.newPage();
+
+        try {
+            await page.goto(robotsUrl);
+        } catch (e) {
+            console.log(`[WARNING]: Failed to get robots.txt for: ${url}\n\n${e}`);
+        }
+
+        const robotsContents = await page.content();
+        return isRootForbidden(robotsContents);
+    }
+
     async crawl(url: string) {
         const page = await this.newPage();
 
