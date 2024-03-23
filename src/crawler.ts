@@ -7,9 +7,13 @@ import loadLemmatizedWord from "./util/lemmatizedMap";
 export default class Crawler {
     browser: Browser;
     page: Page;
+    rank: number;
 
-    public static async create(url: string): Promise<Crawler | null> {
+    public static async create(url: string, rank: number): Promise<Crawler | null> {
         const crawler = new Crawler();
+
+        crawler.rank = rank;
+
         try {
             crawler.browser = await puppeteer.connect({
                 browserWSEndpoint: `wss://${process.env.USER}:${process.env.PASSWORD}@brd.superproxy.io:9222`,
@@ -142,14 +146,15 @@ export default class Crawler {
         const websiteId = uuidv4();
         // Not really neccesary and quite unoptimised, but is fine for now. TODO: Fix this
         const websiteIdsBatch = words.map(() => websiteId);
+        const ranksBatch = words.map(() => this.rank);
 
         const wordIndiciesBatch = words.map((word) => wordIndicies[word]);
 
         try {
             await QueryBuilder.insert(
                 "websites",
-                ["id", "title", "description", "url", "word_count"],
-                [websiteId, pageTitle, pageDescription, url, words.length]
+                ["id", "title", "description", "url", "word_count", "rank"],
+                [websiteId, pageTitle, pageDescription, url, words.length, ranksBatch]
             );
 
             const { rows: keywordRows } = await QueryBuilder.insertManyOrUpdate(
