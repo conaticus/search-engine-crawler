@@ -7,7 +7,7 @@ export default class QueryBuilder {
         const parametisedColumns = columns.map((_, idx) => `$${idx + 1}`);
 
         const query = `INSERT INTO ${table} (${columns.join()}) VALUES (${parametisedColumns.join()})`;
-        await pool.query(query, values);
+        await QueryBuilder.query(query, values);
     }
 
     public static async insertManyOrUpdate(
@@ -26,7 +26,7 @@ export default class QueryBuilder {
         let query = `INSERT INTO ${table} (${columns.join()}) SELECT ${parametisedColumns.join()} ON CONFLICT (${conflictColumns.join()}) DO UPDATE SET ${conflictAction}`;
         if (returns.length != 0) query += ` RETURNING ${returns.join()}`;
 
-        return await pool.query(query, values);
+        return (await QueryBuilder.query(query, values)) as any;
     }
 
     public static async insertMany(
@@ -41,6 +41,14 @@ export default class QueryBuilder {
 
         const query = `INSERT INTO ${table} (${columns.join()}) SELECT ${parametisedColumns.join()}`;
 
-        pool.query(query, values);
+        await QueryBuilder.query(query, values);
+    }
+
+    public static async query(query: string, data: any): Promise<QueryResult<any> | undefined> {
+        try {
+            return await pool.query(query, data);
+        } catch {
+            console.log("[WARNING]: Query failed");
+        }
     }
 }

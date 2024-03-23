@@ -5,15 +5,20 @@ import isRootForbidden from "./util/RobotsParser";
 
 export default class Crawler {
     browser: Browser;
-    documentCount: number;
+    page: Page;
 
-    public static async create(documentCount: number): Promise<Crawler> {
+    public static async create(url: string): Promise<Crawler | null> {
         const crawler = new Crawler();
-        crawler.documentCount = documentCount;
-        crawler.browser = await puppeteer.connect({
-            browserWSEndpoint: `wss://${process.env.USER}:${process.env.PASSWORD}@brd.superproxy.io:9222`,
-        });
+        try {
+            crawler.browser = await puppeteer.connect({
+                browserWSEndpoint: `wss://${process.env.USER}:${process.env.PASSWORD}@brd.superproxy.io:9222`,
+            });
+        } catch {
+            console.log(`Failed to create browser for: ${url}.`);
+            return null;
+        }
 
+        crawler.page = await crawler.newPage();
         return crawler;
     }
 
@@ -45,29 +50,41 @@ export default class Crawler {
      */
     async isPermitted(url: string): Promise<boolean> {
         const robotsUrl = url + "/robots.txt";
-        const page = await this.browser.newPage();
 
         try {
-            await page.goto(robotsUrl);
-        } catch (e) {
-            console.log(`[WARNING]: Failed to get robots.txt for: ${url}\n\n${e}`);
+            await this.page.goto(robotsUrl);
+        } catch {
+            return true;
         }
 
-        const robotsContents = await page.content();
+        const robotsContents = await this.page.content();
         return isRootForbidden(robotsContents);
     }
 
     async crawl(url: string) {
-        const page = await this.newPage();
+        console.log(`Obtaining Permission: ${url}`);
+
+        const isPermitted = await this.isPermitted(url);
+        if (!isPermitted) return;
+
+        console.log(`Crawling: ${url}`);
 
         try {
-            await page.goto(url);
-            console.log(`Crawling: ${url}`);
+            await this.page.goto(url);
         } catch (e) {
-            console.log(`[WARNING]: Failed to request: ${url}\n\n${e}`);
+            console.log(`[WARNING]: Failed to request: ${url} (likely not permitted)`);
+            return;
         }
 
-        const [pageTitle, pageDescription] = await page.evaluate(() => {
+        const language = await this.page.evaluate(() => {
+            const html = document.querySelector("html");
+            return html?.getAttribute("lang");
+        });
+
+        // Only index english websites
+        if (language != "en" && language != "en-gb") return;
+
+        const [pageTitle, pageDescription] = await this.page.evaluate(() => {
             const metaTags = document.getElementsByTagName("meta");
             let description = "";
 
@@ -81,7 +98,7 @@ export default class Crawler {
         });
 
         // TODO: Insert more data such as attributes etc.
-        const words: string[] = await page.evaluate(() => {
+        const words: string[] = await this.page.evaluate(() => {
             const documentText = (document.querySelector("*") as any).innerText;
 
             return documentText
@@ -90,8 +107,12 @@ export default class Crawler {
                 .split(/[\n\r\s]+/g);
         });
 
-        await page.close();
-        return;
+        if (words.length == 0) {
+            console.log(`[WARNING]: No words found for: ${url}`);
+            return;
+        }
+
+        await this.page.close();
 
         const wordIndicies: Record<string, number> = {};
         const keywordIds: Record<string, string> = {};
@@ -160,6 +181,8 @@ export default class Crawler {
                 [updatedWordIds, websiteIdsBatch, wordIndiciesBatch, wordPositions],
                 ["UUID", "UUID", "INT", "INT"]
             );
+
+            console.log(`Succesfully crawled: ${url}`);
         } catch (e) {
             console.log(`[WARNING]: Failed to index: ${url}\n\n${e}`);
         }
