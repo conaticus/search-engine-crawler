@@ -24,4 +24,4 @@ export default function isRootForbidden(robots: string) {
     }
 
     return isForbidden;
-
+}
