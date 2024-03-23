@@ -63,7 +63,7 @@ export default class Crawler {
         }
 
         const robotsContents = await this.page.content();
-        return isRootForbidden(robotsContents);
+        return !isRootForbidden(robotsContents);
     }
 
     async crawl(url: string) {

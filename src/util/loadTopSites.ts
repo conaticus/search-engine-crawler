@@ -28,7 +28,7 @@ export default async function loadTopSites() {
                     await taskThrottler.throttle();
                     taskThrottler.aquire();
 
-                    const crawler = await Crawler.create(url);
+                    const crawler = await Crawler.create(url, lineNumber);
                     if (!crawler) return new Promise((resolve) => resolve(undefined));
                     await crawler.crawl(url);
 

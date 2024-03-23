@@ -11,6 +11,9 @@ export default function isRootForbidden(robots: string) {
         let [key, value] = lineText.trim().replace(/\s+/g, " ").split(":");
         if (!key || !value) continue;
 
+        key = key.trim();
+        value = value.trim();
+
         if (key == "user-agent" && value == "*") {
             userAgentAll = true;
             continue;
