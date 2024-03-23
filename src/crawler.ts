@@ -2,6 +2,7 @@ import puppeteer, { Browser, Page } from "puppeteer";
 import QueryBuilder from "./db/QueryBuilder";
 import { v4 as uuidv4 } from "uuid";
 import isRootForbidden from "./util/RobotsParser";
+import loadLemmatizedWord from "./util/lemmatizedMap";
 
 export default class Crawler {
     browser: Browser;
@@ -98,7 +99,7 @@ export default class Crawler {
         });
 
         // TODO: Insert more data such as attributes etc.
-        const words: string[] = await this.page.evaluate(() => {
+        let words: string[] = await this.page.evaluate(() => {
             const documentText = (document.querySelector("*") as any).innerText;
 
             return documentText
@@ -106,6 +107,9 @@ export default class Crawler {
                 .replace(/[.,\/#!$%\^&\*;:{}=\-_`'~()]/g, "")
                 .split(/[\n\r\s]+/g);
         });
+
+        const tasks = words.map((word) => loadLemmatizedWord(word));
+        words = await Promise.all(tasks);
 
         if (words.length == 0) {
             console.log(`[WARNING]: No words found for: ${url}`);
@@ -125,7 +129,6 @@ export default class Crawler {
         words.forEach((word) => {
             if (wordIndicies[word]) wordIndicies[word]++;
             else wordIndicies[word] = 1;
-            if (url.includes("asus") && word == "the") console.log("yeet");
 
             if (!keywordIds[word]) {
                 keywordIds[word] = uuidv4();
