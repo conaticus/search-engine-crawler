@@ -8,7 +8,7 @@ export default function isRootForbidden(robots: string) {
         const lineText = robotsLines[i].trim().toLowerCase();
         if (lineText.length == 0) continue;
 
-        let [key, value] = lineText.trim().replace(/s+/g, " ").split(":");
+        let [key, value] = lineText.trim().replace(/\s+/g, " ").split(":");
         if (!key || !value) continue;
 
         if (key == "user-agent" && value == "*") {
