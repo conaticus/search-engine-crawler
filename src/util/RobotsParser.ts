@@ -9,6 +9,8 @@ export default function isRootForbidden(robots: string) {
         if (lineText.length == 0) continue;
 
         let [key, value] = lineText.split(":");
+        if (!key || !value) continue;
+
         key = key.trim();
         value = value.trim();
 
